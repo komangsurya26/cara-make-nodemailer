@@ -1,40 +1,99 @@
-const express = require ('express')
-const app = express ()
-const nodemailer = require ('nodemailer')
+const express = require('express')
+const bodyparser = require('body-parser')
+const nodemailer = require('nodemailer')
+const speakeasy = require ('speakeasy')
+const base32 = require ('thirty-two')
+
+
+const app = express();
+
+//View Engine
+app.set('view engine', 'ejs');
+
+// body parser middleware
+app.use(bodyparser.urlencoded({ extended: false }));
+app.use(bodyparser.json());
 
 
 
-//Buat transporter untuk mengirim email
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
+app.get('/', function (req, res) {
+    res.render('contact');
+});
+
+
+
+const secret = 'kunci-rahasia-anda';
+const encodedSecret = base32.encode(secret);
+const otp = speakeasy.totp({
+  secret: encodedSecret.toString(),
+  encoding: 'base32',
+  window: 60 //1 menit
+});
+
+console.log(otp);
+
+let transporter = nodemailer.createTransport({
+    service: 'Gmail',
+
     auth: {
-        user: 'email',
-        pass: 'password'
+        user: 'user',
+        pass: '',
+    }
+
+});
+
+app.post('/send', function (req, res) {
+    email = req.body.email;
+
+    // send mail with defined transport object
+    var mailOptions = {
+        to: req.body.email,
+        subject: "Verify your email ",
+        html:"<h3>OTP for account verification is </h3>" + "<h1 style='font-weight:bold;'>" + otp + "</h1> " 
+        // html body
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+            return console.log(error);
+        }
+        console.log('Message sent: %s', info.messageId);
+        console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+
+        res.render('otp');
+    });
+});
+
+app.post('/verify', function (req, res) {
+
+    if (req.body.otp == otp) {
+        res.send("You has been successfully registered");
+    }
+    else {
+        res.render('otp', { msg: 'otp is incorrect' });
     }
 });
 
-app.get('/send-email',(req,res)=>{
-    
-    //Konfigurasi email yang akan dikirim
-    const mailOptions = {
-        from: 'email',
-        to: 'email',
-        subject: 'Test Email from Node.js',
-        text: 'This is a test email from Node.js using Nodemailer!'
+app.post('/resend', function (req, res) {
+    var mailOptions = {
+        to: email,
+        subject: "Otp for registration is: ",
+        html: "<h3>OTP for account verification is </h3>" + "<h1 style='font-weight:bold;'>" + otp + "</h1>" // html body
     };
-    // Kirim email
-    transporter.sendMail(mailOptions, function(error, info){
+
+    transporter.sendMail(mailOptions, (error, info) => {
         if (error) {
-            console.log(error);
-        } else {
-            console.log('Email sent: ' + info.response);
-            return res.send('email send success!!!')
+            return console.log(error);
         }
+        console.log('Message sent: %s', info.messageId);
+        console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+        res.render('otp', { msg: "otp has been sent" });
     });
-})
 
+});
 
-
-app.listen (3000, ()=>{
-    console.log('Server listening on port 3000')
+//defining port
+const PORT = 3000
+app.listen(PORT, () => {
+    console.log(`app is live at ${PORT}`);
 })
